@@ -1,0 +1,48 @@
+# Merges chai-bot PRs that add one org member to peribolos.yaml.
+#
+# chai-bot opens PRs from a fork, and fork PRs get no secrets under
+# pull_request, so this must be pull_request_target. That event runs with
+# secrets: never check out or execute anything from the PR head here. The
+# script reads the PR only as data, through the API.
+name: chai-bot membership
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Per PR on purpose: a shared group keeps only one pending run and would
+# silently drop requests that arrive in a burst.
+concurrency:
+  group: chai-bot-membership-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  merge:
+    # Numeric id of redhat-chai-bot: unlike a login, it cannot be re-registered.
+    if: github.event.pull_request.user.id == 273475629 && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      # An App token, not GITHUB_TOKEN: merges made with GITHUB_TOKEN do not
+      # trigger the peribolos workflow. Scoped down so it cannot touch members.
+      - name: Mint merge token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.GOVERNANCE_CLIENT_ID }}
+          private-key: ${{ secrets.GOVERNANCE_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Validate and merge
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 scripts/chai_bot_membership.py

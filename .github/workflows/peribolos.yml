@@ -1,0 +1,60 @@
+# Applies peribolos.yaml to the org. Only membership is managed.
+name: peribolos
+
+on:
+  push:
+    branches: [main]
+    paths: ['peribolos.yaml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A pending run is replaced by a newer one, which is safe here: every run
+# reconciles the latest main, so it covers the merges of the run it replaced.
+concurrency:
+  group: peribolos
+  cancel-in-progress: false
+
+env:
+  PROW_REF: 6c4d88e3b73e434d7acc03395ec337fa2b3f1fad # kubernetes-sigs/prow
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Mint governance token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.GOVERNANCE_CLIENT_ID }}
+          private-key: ${{ secrets.GOVERNANCE_PRIVATE_KEY }}
+          owner: fullsend-day-of-learning
+      - name: Check out prow
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: kubernetes-sigs/prow
+          ref: ${{ env.PROW_REF }}
+          path: prow
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: prow/go.mod
+          cache-dependency-path: prow/go.sum
+      - name: Apply peribolos.yaml
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          printf '%s' "$TOKEN" > "$RUNNER_TEMP/peribolos.token"
+          cd prow
+          go run ./cmd/peribolos \
+            --config-path="$GITHUB_WORKSPACE/peribolos.yaml" \
+            --github-token-path="$RUNNER_TEMP/peribolos.token" \
+            --min-admins=1 \
+            --require-self=false \
+            --fix-org-members \
+            --confirm

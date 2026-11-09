@@ -1,0 +1,14 @@
+# Source of truth for org membership; reconciled by the peribolos workflow.
+# Peribolos REMOVES any member or pending invitation not listed here.
+#
+# chai-bot PRs that add one line to members are merged automatically; see
+# AGENTS.md. Keep members sorted, case-insensitively.
+
+orgs:
+  fullsend-day-of-learning:
+    admins:
+      - jflowers
+
+    members:
+      - dhshah13
+      - rh-hemartin
